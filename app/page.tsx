@@ -144,13 +144,13 @@ export default function Home() {
         <a className="brand" href="#top" aria-label="Signalist home"><span className="brand-mark">S</span><span>Signalist</span></a>
         <nav className="nav-tabs" aria-label="Primary navigation">
           {(['overview', 'news', 'portfolio'] as const).map((item) => (
-            <button key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); document.getElementById(item)?.scrollIntoView({ behavior: 'smooth' }); }}>{item}</button>
+            <button key={item} className={tab === item ? 'active' : ''} aria-selected={tab === item} role="tab" onClick={() => { setTab(item); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>{item}</button>
           ))}
         </nav>
         <button className="watch-btn" onClick={refreshData}>{refreshing ? 'Refreshing…' : 'Refresh live data'} <span>{holdings.length}</span></button>
       </header>
 
-      <section className="hero" id="top">
+      <section className={`hero tab-view ${tab !== 'overview' ? 'view-hidden' : ''}`} id="top" aria-hidden={tab !== 'overview'}>
         <div>
           <p className="eyebrow"><span className="pulse" /> Market intelligence · {lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Connecting live data'}</p>
           <h1>See the signal.<br />Skip the noise.</h1>
@@ -164,7 +164,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section" id="overview">
+      <section className={`section tab-view ${tab !== 'overview' ? 'view-hidden' : ''}`} id="overview" aria-hidden={tab !== 'overview'}>
         <div className="section-heading"><div><p className="kicker">Ranked opportunities</p><h2>Today’s strongest signals</h2></div><p className="method-note">7-factor score · Refreshed 9:42 AM CT</p></div>
         <div className="pick-grid">
           {picks.map((pick, index) => (
@@ -181,7 +181,7 @@ export default function Home() {
         <div className="disclosure"><b>How rankings work</b><p>Scores blend earnings quality, analyst revisions, valuation, price momentum, volatility, news sentiment, and macro sensitivity. Rankings are research prompts—not predictions, guarantees, or personalized investment advice.</p></div>
       </section>
 
-      <section className="news-section" id="news">
+      <section className={`news-section tab-view ${tab !== 'news' ? 'view-hidden' : ''}`} id="news" aria-hidden={tab !== 'news'}>
         <div className="section-heading"><div><p className="kicker">Verified feed</p><h2>News that moves markets</h2></div><div className="filters">{['All', 'Markets', 'Macro', 'Filing'].map(item => <button key={item} onClick={() => setFilter(item)} className={filter === item ? 'active' : ''}>{item}</button>)}</div></div>
         <div className="news-layout">
           <div className="news-list">
@@ -199,7 +199,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="portfolio-section" id="portfolio">
+      <section className={`portfolio-section tab-view ${tab !== 'portfolio' ? 'view-hidden' : ''}`} id="portfolio" aria-hidden={tab !== 'portfolio'}>
         <div className="section-heading light"><div><p className="kicker">Scenario planner</p><h2>Give your goals a number</h2><p>Explore how consistent investing and compounding could shape a long-term portfolio.</p></div></div>
         <div className="portfolio-live">
           <div className="portfolio-summary">
