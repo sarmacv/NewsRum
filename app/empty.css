@@ -1,0 +1,1 @@
+.live-empty{grid-column:1/-1;border:1px dashed rgba(120,140,134,.45);border-radius:14px;padding:32px;text-align:center;color:#71817d;font-size:12px;line-height:1.6;background:rgba(255,255,255,.45)}.news-list>.live-empty{border:0;background:white;min-height:180px;display:grid;place-items:center}

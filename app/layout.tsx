@@ -5,6 +5,7 @@ import './live.css';
 import './total.css';
 import './entry.css';
 import './tabs.css';
+import './empty.css';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',

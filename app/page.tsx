@@ -6,19 +6,7 @@ type Quote = { symbol: string; name: string; price: number; previous: number; ch
 type Holding = { symbol: string; quantity: number; averageCost: number };
 type LiveNews = { id: string; title: string; source: string; link: string; publishedAt: string; tag: string };
 
-const picks = [
-  { ticker: 'NVDA', name: 'NVIDIA', score: 88, price: 174.18, change: 2.4, confidence: 'High', signals: ['AI demand', 'Estimate revisions', 'Momentum'], risk: 'Elevated valuation' },
-  { ticker: 'MSFT', name: 'Microsoft', score: 84, price: 498.72, change: 1.1, confidence: 'High', signals: ['Cloud growth', 'Strong cash flow', 'Low volatility'], risk: 'AI capex intensity' },
-  { ticker: 'JPM', name: 'JPMorgan Chase', score: 78, price: 291.34, change: 0.7, confidence: 'Medium', signals: ['Net interest income', 'Capital strength', 'Value'], risk: 'Credit cycle' },
-  { ticker: 'LLY', name: 'Eli Lilly', score: 75, price: 1021.40, change: -0.3, confidence: 'Medium', signals: ['Pipeline', 'Revenue growth', 'Defensive'], risk: 'Premium multiple' },
-];
-
-const news = [
-  { source: 'Reuters', time: '18m', title: 'Chipmakers rise as data-center demand stays resilient', tag: 'Semiconductors', tone: 'Positive', tickers: ['NVDA', 'AMD'] },
-  { source: 'SEC EDGAR', time: '43m', title: 'Microsoft files quarterly report with updated risk factors', tag: 'Filing', tone: 'Neutral', tickers: ['MSFT'] },
-  { source: 'Federal Reserve', time: '1h', title: 'Latest policy statement keeps markets focused on inflation data', tag: 'Macro', tone: 'Neutral', tickers: ['SPY', 'JPM'] },
-  { source: 'Associated Press', time: '2h', title: 'Markets edge higher as investors weigh earnings outlooks', tag: 'Markets', tone: 'Positive', tickers: ['SPY'] },
-];
+const researchUniverse = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'JPM', 'UNH', 'LLY', 'XOM'];
 
 const sources = [
   { name: 'Reuters', type: 'Independent reporting', trust: 'Editorial standards' },
@@ -48,8 +36,8 @@ export default function Home() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [liveNews, setLiveNews] = useState<LiveNews[]>([]);
-  const [symbol, setSymbol] = useState('AAPL');
-  const [quantity, setQuantity] = useState(10);
+  const [symbol, setSymbol] = useState('');
+  const [quantity, setQuantity] = useState(1);
   const [addingStock, setAddingStock] = useState(false);
   const [addError, setAddError] = useState('');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -57,7 +45,13 @@ export default function Home() {
 
   useEffect(() => {
     const saved = localStorage.getItem('signalist-portfolio');
-    setHoldings(saved ? JSON.parse(saved) : [{ symbol: 'MSFT', quantity: 12, averageCost: 410 }, { symbol: 'NVDA', quantity: 30, averageCost: 142 }]);
+    const stored: Holding[] = saved ? JSON.parse(saved) : [];
+    const withoutOldSamples = stored.filter(item => !(
+      (item.symbol === 'MSFT' && item.quantity === 12 && item.averageCost === 410) ||
+      (item.symbol === 'NVDA' && item.quantity === 30 && item.averageCost === 142)
+    ));
+    setHoldings(withoutOldSamples);
+    localStorage.setItem('signalist-portfolio', JSON.stringify(withoutOldSamples));
   }, []);
 
   useEffect(() => {
@@ -67,7 +61,7 @@ export default function Home() {
   async function refreshData() {
     setRefreshing(true);
     try {
-      const symbols = [...new Set([...holdings.map(item => item.symbol), ...picks.map(item => item.ticker), 'SPY'])].join(',');
+      const symbols = [...new Set([...holdings.map(item => item.symbol), ...researchUniverse, 'SPY'])].join(',');
       const [marketResponse, newsResponse] = await Promise.all([fetch(`/api/market?symbols=${symbols}`), fetch('/api/news')]);
       const market = await marketResponse.json();
       const feed = await newsResponse.json();
@@ -120,7 +114,6 @@ export default function Home() {
 
   const maxPoint = Math.max(...projection.points);
   const chart = projection.points.map((point, i) => `${(i / Math.max(1, projection.points.length - 1)) * 100},${100 - (point / maxPoint) * 82}`).join(' ');
-  const filteredNews = filter === 'All' ? news : news.filter((item) => item.tag === filter);
   const portfolioRows = holdings.map(holding => {
     const quote = quotes[holding.symbol];
     const price = quote?.price ?? holding.averageCost;
@@ -137,6 +130,18 @@ export default function Home() {
     return sum + (alignedIndex >= 0 ? history[alignedIndex].close * row.quantity : 0);
   }, 0)).filter(value => value > 0);
   const liveFilteredNews = filter === 'All' ? liveNews : liveNews.filter(item => item.tag === filter);
+  const opportunities = researchUniverse.flatMap(symbol => {
+    const quote = quotes[symbol];
+    if (!quote || quote.history.length < 2) return [];
+    const first = quote.history[0].close;
+    const monthReturn = first ? ((quote.price - first) / first) * 100 : 0;
+    const changes = quote.history.slice(1).map((point, index) => Math.abs((point.close - quote.history[index].close) / quote.history[index].close) * 100);
+    const volatility = changes.reduce((sum, value) => sum + value, 0) / Math.max(1, changes.length);
+    const score = Math.max(1, Math.min(99, Math.round(50 + monthReturn * 2 - volatility * 3)));
+    return [{ ticker: symbol, quote, score, monthReturn, volatility }];
+  }).sort((a, b) => b.score - a.score).slice(0, 4);
+  const spy = quotes.SPY;
+  const marketScore = spy ? Math.max(1, Math.min(99, Math.round(50 + spy.changePercent * 8))) : null;
 
   return (
     <main className="app-shell">
@@ -157,28 +162,29 @@ export default function Home() {
           <p className="hero-copy">Trusted financial news, explainable stock rankings, and portfolio scenarios—brought together in one focused workspace.</p>
         </div>
         <div className="market-card">
-          <div><span>Market pulse</span><strong>Constructive</strong></div>
-          <div className="market-score"><b>72</b><small>/100</small></div>
-          <div className="meter"><i /></div>
-          <p>Momentum is positive while volatility remains moderate.</p>
+          <div><span>S&amp;P 500 pulse</span><strong>{spy ? (spy.changePercent >= 0 ? 'Positive' : 'Negative') : 'Awaiting live quote'}</strong></div>
+          <div className="market-score"><b>{marketScore ?? '—'}</b>{marketScore != null && <small>/100</small>}</div>
+          <div className="meter"><i style={{ width: `${marketScore ?? 0}%` }} /></div>
+          <p>{spy ? `SPY is ${spy.changePercent >= 0 ? 'up' : 'down'} ${Math.abs(spy.changePercent)}% in the latest market session.` : 'No placeholder is shown when the live market feed is unavailable.'}</p>
         </div>
       </section>
 
       <section className={`section tab-view ${tab !== 'overview' ? 'view-hidden' : ''}`} id="overview" aria-hidden={tab !== 'overview'}>
-        <div className="section-heading"><div><p className="kicker">Ranked opportunities</p><h2>Today’s strongest signals</h2></div><p className="method-note">7-factor score · Refreshed 9:42 AM CT</p></div>
+        <div className="section-heading"><div><p className="kicker">Ranked opportunities</p><h2>Today’s strongest signals</h2></div><p className="method-note">Live price-based score · {lastRefresh ? `Refreshed ${lastRefresh.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Awaiting data'}</p></div>
         <div className="pick-grid">
-          {picks.map((pick, index) => (
+          {opportunities.map((pick, index) => (
             <article className="pick-card" key={pick.ticker}>
-              <div className="pick-top"><span className="rank">0{index + 1}</span><span className={`confidence ${pick.confidence.toLowerCase()}`}>{pick.confidence} confidence</span></div>
-              <div className="ticker-row"><div><h3>{pick.ticker}</h3><p>{pick.name}</p></div><div className="score-ring" style={{'--score': `${pick.score * 3.6}deg`} as React.CSSProperties}><span>{pick.score}</span></div></div>
-              <div className="price-row"><strong>${(quotes[pick.ticker]?.price ?? pick.price).toLocaleString()}</strong><span className={(quotes[pick.ticker]?.changePercent ?? pick.change) >= 0 ? 'up' : 'down'}>{(quotes[pick.ticker]?.changePercent ?? pick.change) >= 0 ? '↗' : '↘'} {Math.abs(quotes[pick.ticker]?.changePercent ?? pick.change)}%</span></div>
-              <Sparkline values={(quotes[pick.ticker]?.history ?? []).map(point => point.close)} positive={(quotes[pick.ticker]?.changePercent ?? pick.change) >= 0} />
-              <div className="chips">{pick.signals.map(signal => <span key={signal}>{signal}</span>)}</div>
-              <div className="risk"><span>Watch</span>{pick.risk}</div>
+              <div className="pick-top"><span className="rank">0{index + 1}</span><span className={`confidence ${pick.score >= 70 ? 'high' : 'medium'}`}>Market-data score</span></div>
+              <div className="ticker-row"><div><h3>{pick.ticker}</h3><p>{pick.quote.name}</p></div><div className="score-ring" style={{'--score': `${pick.score * 3.6}deg`} as React.CSSProperties}><span>{pick.score}</span></div></div>
+              <div className="price-row"><strong>${pick.quote.price.toLocaleString()}</strong><span className={pick.quote.changePercent >= 0 ? 'up' : 'down'}>{pick.quote.changePercent >= 0 ? '↗' : '↘'} {Math.abs(pick.quote.changePercent)}%</span></div>
+              <Sparkline values={pick.quote.history.map(point => point.close)} positive={pick.monthReturn >= 0} />
+              <div className="chips"><span>30d {pick.monthReturn >= 0 ? '+' : ''}{pick.monthReturn.toFixed(1)}%</span><span>Avg move {pick.volatility.toFixed(1)}%</span></div>
+              <div className="risk"><span>Live inputs</span>Momentum and realized price movement</div>
             </article>
           ))}
+          {!opportunities.length && <div className="live-empty">Live rankings are unavailable. Signalist will not substitute sample recommendations.</div>}
         </div>
-        <div className="disclosure"><b>How rankings work</b><p>Scores blend earnings quality, analyst revisions, valuation, price momentum, volatility, news sentiment, and macro sensitivity. Rankings are research prompts—not predictions, guarantees, or personalized investment advice.</p></div>
+        <div className="disclosure"><b>How rankings work</b><p>Scores use live 30-day price momentum and realized daily movement for a fixed research universe. They are research prompts—not predictions, guarantees, or personalized investment advice.</p></div>
       </section>
 
       <section className={`news-section tab-view ${tab !== 'news' ? 'view-hidden' : ''}`} id="news" aria-hidden={tab !== 'news'}>
@@ -191,9 +197,7 @@ export default function Home() {
                 <div className="news-copy"><div className="news-meta"><span>{item.source}</span><i>•</i><time>{item.publishedAt ? new Date(item.publishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Live'}</time><em>{item.tag}</em></div><h3><a href={item.link} target="_blank" rel="noreferrer">{item.title}</a></h3><div className="news-tags"><span>Verified source</span></div></div>
                 <a className="save" href={item.link} target="_blank" rel="noreferrer" aria-label={`Open ${item.title}`}>↗</a>
               </article>
-            )) : filteredNews.map(item => (
-              <article className="news-item" key={item.title}><div className="source-icon">{item.source.slice(0, 1)}</div><div className="news-copy"><div className="news-meta"><span>{item.source}</span><i>•</i><time>{item.time} ago</time><em>{item.tag}</em></div><h3>{item.title}</h3><div className="news-tags"><span className={item.tone.toLowerCase()}>{item.tone}</span>{item.tickers.map(t => <b key={t}>{t}</b>)}</div></div></article>
-            ))}
+            )) : <div className="live-empty">No live trusted-source stories are available right now. No sample headlines are being shown.</div>}
           </div>
           <aside className="source-card"><p className="kicker">Source quality</p><h3>Trust is the filter</h3><p>Signalist prioritizes primary documents and outlets with transparent editorial standards.</p>{sources.map(source => <div className="source-row" key={source.name}><span>✓</span><div><b>{source.name}</b><small>{source.type}</small></div><em>{source.trust}</em></div>)}</aside>
         </div>
