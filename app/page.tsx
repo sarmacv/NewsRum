@@ -50,7 +50,8 @@ export default function Home() {
   const [liveNews, setLiveNews] = useState<LiveNews[]>([]);
   const [symbol, setSymbol] = useState('AAPL');
   const [quantity, setQuantity] = useState(10);
-  const [averageCost, setAverageCost] = useState(200);
+  const [addingStock, setAddingStock] = useState(false);
+  const [addError, setAddError] = useState('');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -82,14 +83,29 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, [holdings.map(item => item.symbol).join(',')]);
 
-  function addHolding(event: FormEvent) {
+  async function addHolding(event: FormEvent) {
     event.preventDefault();
     const cleanSymbol = symbol.trim().toUpperCase();
-    if (!/^[A-Z.\-]{1,10}$/.test(cleanSymbol) || quantity <= 0 || averageCost < 0) return;
-    setHoldings(current => current.some(item => item.symbol === cleanSymbol)
-      ? current.map(item => item.symbol === cleanSymbol ? { symbol: cleanSymbol, quantity: item.quantity + quantity, averageCost: ((item.quantity * item.averageCost) + (quantity * averageCost)) / (item.quantity + quantity) } : item)
-      : [...current, { symbol: cleanSymbol, quantity, averageCost }]);
-    setSymbol('');
+    if (!/^[A-Z.\-]{1,10}$/.test(cleanSymbol) || quantity <= 0) return;
+    setAddingStock(true);
+    setAddError('');
+    try {
+      let quote = quotes[cleanSymbol];
+      if (!quote) {
+        const response = await fetch(`/api/market?symbols=${encodeURIComponent(cleanSymbol)}`);
+        const data = await response.json();
+        quote = data.quotes?.[0];
+      }
+      if (!quote?.price) throw new Error('Price unavailable');
+      const purchasePrice = quote.price;
+      setQuotes(current => ({ ...current, [cleanSymbol]: quote }));
+      setHoldings(current => current.some(item => item.symbol === cleanSymbol)
+        ? current.map(item => item.symbol === cleanSymbol ? { symbol: cleanSymbol, quantity: item.quantity + quantity, averageCost: ((item.quantity * item.averageCost) + (quantity * purchasePrice)) / (item.quantity + quantity) } : item)
+        : [...current, { symbol: cleanSymbol, quantity, averageCost: purchasePrice }]);
+      setSymbol('');
+    } catch {
+      setAddError(`Could not retrieve a current price for ${cleanSymbol}. Check the symbol and try again.`);
+    } finally { setAddingStock(false); }
   }
 
   const projection = useMemo(() => {
@@ -191,8 +207,8 @@ export default function Home() {
             <form className="add-stock" onSubmit={addHolding}>
               <label>Symbol<input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="AAPL" maxLength={10} required /></label>
               <label>Quantity<input type="number" min="0.0001" step="any" value={quantity} onChange={e => setQuantity(Number(e.target.value))} required /></label>
-              <label>Average cost<input type="number" min="0" step="0.01" value={averageCost} onChange={e => setAverageCost(Number(e.target.value))} required /></label>
-              <button type="submit">Add position</button>
+              <button type="submit" disabled={addingStock}>{addingStock ? 'Getting price…' : 'Add at current price'}</button>
+              {addError && <p className="add-error" role="alert">{addError}</p>}
             </form>
           </div>
           <div className="holdings-table" role="region" aria-label="Portfolio holdings" tabIndex={0}>
