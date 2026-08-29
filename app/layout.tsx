@@ -6,6 +6,7 @@ import './total.css';
 import './entry.css';
 import './tabs.css';
 import './empty.css';
+import './projection.css';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',

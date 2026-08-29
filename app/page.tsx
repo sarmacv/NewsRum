@@ -28,10 +28,9 @@ function Sparkline({ values, positive = true }: { values: number[]; positive?: b
 
 export default function Home() {
   const [tab, setTab] = useState<'overview' | 'news' | 'portfolio'>('overview');
-  const [investment, setInvestment] = useState(25000);
-  const [monthly, setMonthly] = useState(750);
+  const [monthly, setMonthly] = useState(0);
   const [years, setYears] = useState(10);
-  const [rate, setRate] = useState(8);
+  const [rate, setRate] = useState(0);
   const [filter, setFilter] = useState('All');
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -102,18 +101,6 @@ export default function Home() {
     } finally { setAddingStock(false); }
   }
 
-  const projection = useMemo(() => {
-    let value = investment;
-    const points = [value];
-    for (let y = 1; y <= years; y++) {
-      value = value * (1 + rate / 100) + monthly * 12;
-      points.push(value);
-    }
-    return { value, gain: value - investment - monthly * 12 * years, points };
-  }, [investment, monthly, years, rate]);
-
-  const maxPoint = Math.max(...projection.points);
-  const chart = projection.points.map((point, i) => `${(i / Math.max(1, projection.points.length - 1)) * 100},${100 - (point / maxPoint) * 82}`).join(' ');
   const portfolioRows = holdings.map(holding => {
     const quote = quotes[holding.symbol];
     const price = quote?.price ?? holding.averageCost;
@@ -123,6 +110,17 @@ export default function Home() {
   });
   const portfolioValue = portfolioRows.reduce((sum, row) => sum + row.value, 0);
   const portfolioCost = portfolioRows.reduce((sum, row) => sum + row.cost, 0);
+  const projection = useMemo(() => {
+    let value = portfolioValue;
+    const points = [value];
+    for (let y = 1; y <= years; y++) {
+      value = value * (1 + rate / 100) + monthly * 12;
+      points.push(value);
+    }
+    return { value, gain: value - portfolioValue - monthly * 12 * years, contributions: monthly * 12 * years, points };
+  }, [portfolioValue, monthly, years, rate]);
+  const maxPoint = Math.max(1, ...projection.points);
+  const chart = projection.points.map((point, i) => `${(i / Math.max(1, projection.points.length - 1)) * 100},${100 - (point / maxPoint) * 82}`).join(' ');
   const longestHistory = Math.max(0, ...portfolioRows.map(row => row.quote?.history.length ?? 0));
   const portfolioHistory = Array.from({ length: longestHistory }, (_, index) => portfolioRows.reduce((sum, row) => {
     const history = row.quote?.history ?? [];
@@ -234,15 +232,16 @@ export default function Home() {
         </div>
         <div className="planner">
           <div className="controls">
-            <label>Starting investment <strong>{money(investment)}</strong><input aria-label="Starting investment" type="range" min="1000" max="100000" step="1000" value={investment} onChange={e => setInvestment(Number(e.target.value))} /></label>
+            <label>Starting portfolio <strong>{money(portfolioValue)}</strong><span className="fixed-input">Uses your current holdings</span></label>
             <label>Monthly contribution <strong>{money(monthly)}</strong><input aria-label="Monthly contribution" type="range" min="0" max="3000" step="50" value={monthly} onChange={e => setMonthly(Number(e.target.value))} /></label>
             <label>Time horizon <strong>{years} years</strong><input aria-label="Time horizon" type="range" min="1" max="30" value={years} onChange={e => setYears(Number(e.target.value))} /></label>
             <label>Assumed annual return <strong>{rate}%</strong><input aria-label="Assumed annual return" type="range" min="1" max="14" step="0.5" value={rate} onChange={e => setRate(Number(e.target.value))} /></label>
           </div>
           <div className="projection">
-            <p>Estimated portfolio value</p><h3>{money(projection.value)}</h3><span>{money(projection.gain)} estimated growth</span>
+            <p>Estimated portfolio value</p><h3>{money(projection.value)}</h3><span>{money(projection.gain)} estimated market growth</span>
+            <div className="formula-row"><span>Current portfolio <b>{money(portfolioValue)}</b></span><span>Future contributions <b>{money(projection.contributions)}</b></span><span>Assumed return <b>{rate}%/year</b></span></div>
             <div className="chart-wrap"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Portfolio growth projection"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c8f35d" stopOpacity=".35"/><stop offset="1" stopColor="#c8f35d" stopOpacity="0"/></linearGradient></defs><polygon points={`0,100 ${chart} 100,100`} fill="url(#fill)"/><polyline points={chart} fill="none" stroke="#c8f35d" strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg><div><span>Today</span><span>Year {years}</span></div></div>
-            <p className="fine-print">Illustrative projection using annual compounding and end-of-year contributions. Actual returns vary and may be negative.</p>
+            <p className="fine-print">Formula: each year’s starting balance × (1 + assumed return) + 12 monthly contributions. Contributions are added at year end for a conservative illustration. Actual returns vary and may be negative.</p>
           </div>
         </div>
       </section>
