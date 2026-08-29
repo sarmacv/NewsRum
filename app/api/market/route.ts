@@ -3,9 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 type ChartPoint = { time: number; close: number };
 
 async function getQuote(symbol: string) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
-  const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 Signalist/1.0' }, next: { revalidate: 60 } });
-  if (!response.ok) throw new Error(`Market data unavailable for ${symbol}`);
+  const path = `/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
+  let response: Response | undefined;
+  for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
+    response = await fetch(`https://${host}${path}`, { headers: { 'User-Agent': 'Mozilla/5.0 Signalist/1.0', Accept: 'application/json' }, next: { revalidate: 60 } });
+    if (response.ok) break;
+  }
+  if (!response?.ok) throw new Error(`Market data unavailable for ${symbol}`);
   const payload = await response.json();
   const result = payload.chart?.result?.[0];
   if (!result) throw new Error(`Unknown symbol ${symbol}`);

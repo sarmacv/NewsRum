@@ -114,6 +114,12 @@ export default function Home() {
   });
   const portfolioValue = portfolioRows.reduce((sum, row) => sum + row.value, 0);
   const portfolioCost = portfolioRows.reduce((sum, row) => sum + row.cost, 0);
+  const longestHistory = Math.max(0, ...portfolioRows.map(row => row.quote?.history.length ?? 0));
+  const portfolioHistory = Array.from({ length: longestHistory }, (_, index) => portfolioRows.reduce((sum, row) => {
+    const history = row.quote?.history ?? [];
+    const alignedIndex = history.length - longestHistory + index;
+    return sum + (alignedIndex >= 0 ? history[alignedIndex].close * row.quantity : 0);
+  }, 0)).filter(value => value > 0);
   const liveFilteredNews = filter === 'All' ? liveNews : liveNews.filter(item => item.tag === filter);
 
   return (
@@ -181,7 +187,7 @@ export default function Home() {
         <div className="section-heading light"><div><p className="kicker">Scenario planner</p><h2>Give your goals a number</h2><p>Explore how consistent investing and compounding could shape a long-term portfolio.</p></div></div>
         <div className="portfolio-live">
           <div className="portfolio-summary">
-            <div><p>Current portfolio value</p><h3>{money(portfolioValue)}</h3><span className={portfolioValue - portfolioCost >= 0 ? 'gain' : 'loss'}>{portfolioValue - portfolioCost >= 0 ? '+' : ''}{money(portfolioValue - portfolioCost)} · {portfolioCost ? (((portfolioValue - portfolioCost) / portfolioCost) * 100).toFixed(2) : '0.00'}%</span></div>
+            <div className="total-value"><p>Current portfolio value</p><h3>{money(portfolioValue)}</h3><span className={portfolioValue - portfolioCost >= 0 ? 'gain' : 'loss'}>{portfolioValue - portfolioCost >= 0 ? '+' : ''}{money(portfolioValue - portfolioCost)} · {portfolioCost ? (((portfolioValue - portfolioCost) / portfolioCost) * 100).toFixed(2) : '0.00'}%</span><Sparkline values={portfolioHistory} positive={portfolioValue >= portfolioCost} /></div>
             <form className="add-stock" onSubmit={addHolding}>
               <label>Symbol<input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="AAPL" maxLength={10} required /></label>
               <label>Quantity<input type="number" min="0.0001" step="any" value={quantity} onChange={e => setQuantity(Number(e.target.value))} required /></label>
